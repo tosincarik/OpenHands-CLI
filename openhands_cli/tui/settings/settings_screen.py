@@ -28,6 +28,33 @@ from openhands_cli.utils import (
 )
 
 
+def _sanitize_model_identifier(raw: str) -> str:
+    """Normalize model identifiers coming back from the UI.
+
+    This is intentionally conservative and only strips known UI artifacts
+    so that valid identifiers pass through unchanged.
+    """
+
+    value = raw.strip()
+
+    # Strip step counters like "(Step 2/3) gemini-2.0-flash-lite"
+    if value.startswith("(Step "):
+        closing = value.find(")")
+        if closing != -1:
+            value = value[closing + 1 :].lstrip()
+
+    # Collapse patterns like "gemini/2.5 gemini-2.0-flash-lite" into
+    # "gemini/gemini-2.0-flash-lite" while leaving nested providers such as
+    # "openrouter/gemini/gemini-2.5-pro" unchanged.
+    parts = value.split()
+    if len(parts) == 2 and "/" in parts[0] and "/" not in parts[1]:
+        provider = parts[0].split("/")[0]
+        model = parts[1]
+        return f"{provider}/{model}"
+
+    return value
+
+
 class SettingsScreen:
     def __init__(self, conversation: BaseConversation | None = None):
         self.file_store = LocalFileStore(PERSISTENCE_DIR)
@@ -156,7 +183,8 @@ class SettingsScreen:
             return
 
         # Store the collected settings for persistence
-        self._save_llm_settings(f"{provider}/{llm_model}", api_key)
+        model_identifier = _sanitize_model_identifier(f"{provider}/{llm_model}")
+        self._save_llm_settings(model_identifier, api_key)
 
     def handle_advanced_settings(self, escapable=True):
         """Handle advanced settings configuration with clean step-by-step flow."""

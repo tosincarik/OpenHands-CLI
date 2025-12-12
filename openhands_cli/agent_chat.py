@@ -4,6 +4,7 @@ Agent chat functionality for OpenHands CLI.
 Provides a conversation interface with an AI agent using OpenHands patterns.
 """
 
+import os
 import sys
 import uuid
 from datetime import datetime
@@ -16,10 +17,7 @@ from openhands.sdk import (
     TextContent,
 )
 from openhands.sdk.conversation.state import ConversationExecutionStatus
-from openhands.sdk.security.confirmation_policy import (
-    AlwaysConfirm,
-    ConfirmationPolicyBase,
-)
+from openhands.sdk.security.confirmation_policy import ConfirmationPolicyBase
 from openhands_cli.runner import ConversationRunner
 from openhands_cli.setup import (
     MissingAgentSpec,
@@ -35,6 +33,48 @@ from openhands_cli.tui.tui import (
 )
 from openhands_cli.user_actions import UserConfirmation, exit_session_confirmation
 from openhands_cli.user_actions.utils import get_session_prompter
+
+
+def _should_skip_terminal_check() -> tuple[bool, str | None]:
+    """Determine if the terminal compatibility check should be bypassed."""
+
+    skip_env = os.environ.get("OPENHANDS_CLI_SKIP_TTY_CHECK")
+    if skip_env and skip_env.lower() not in ("0", "false", "no"):
+        return True, "OPENHANDS_CLI_SKIP_TTY_CHECK"
+
+    if os.environ.get("CI", "").lower() in ("1", "true", "yes"):
+        return True, "CI"
+
+    return False, None
+
+
+def check_terminal_compatibility() -> bool:
+    """Check if the terminal supports interactive prompts.
+
+    Returns:
+        bool: True if terminal is compatible, False otherwise.
+    """
+    skip_check, reason = _should_skip_terminal_check()
+    if skip_check:
+        if sys.stdout.isatty():
+            message = (
+                "<grey>Skipping terminal compatibility check "
+                f"(detected {reason} environment variable).</grey>"
+            )
+            try:
+                print_formatted_text(HTML(message))
+            except Exception:
+                print(message)
+        return True
+
+    if not sys.stdin.isatty() or not sys.stdout.isatty():
+        return False
+
+    term = os.environ.get("TERM", "").lower()
+    if term in ("dumb", "", "unknown"):
+        return False
+
+    return True
 
 
 def _restore_tty() -> None:
@@ -70,20 +110,53 @@ def run_cli_entry(
 ) -> None:
     """Run the agent chat session using the agent SDK.
 
-    Args:
-        resume_conversation_id: ID of conversation to resume
-        confirmation_policy: Confirmation policy to use.
-            Options: AlwaysConfirm(), NeverConfirm(), ConfirmRisky()
-            Defaults to AlwaysConfirm() if not provided.
-        queued_inputs: Optional list of input strings to queue at the start
-
     Raises:
         AgentSetupError: If agent setup fails
         KeyboardInterrupt: If user interrupts the session
         EOFError: If EOF is encountered
     """
-    if confirmation_policy is None:
-        confirmation_policy = AlwaysConfirm()
+
+    is_tty = sys.stdout.isatty()
+
+    if not check_terminal_compatibility():
+        if is_tty:
+            print_formatted_text(
+                HTML("<red>❌ Interactive terminal not detected</red>")
+            )
+            print_formatted_text(
+                HTML(
+                    "<yellow>OpenHands CLI requires an interactive terminal.</yellow>"
+                )
+            )
+            print_formatted_text("")
+            print_formatted_text(HTML("<b>Requirements:</b>"))
+            print_formatted_text("• Run in an interactive shell (not piped)")
+            print_formatted_text(
+                "• Ensure TERM is set (e.g., TERM=xterm-256color)"
+            )
+            print_formatted_text(
+                "• Use TTY allocation with Docker: docker run -it ..."
+            )
+            print_formatted_text(
+                "• Use PTY allocation with SSH: ssh -t user@host ..."
+            )
+            print_formatted_text("")
+            print_formatted_text(HTML("<b>Current environment:</b>"))
+            print_formatted_text(f"• TERM: {os.environ.get('TERM', 'not set')}")
+            print_formatted_text(f"• stdin is TTY: {sys.stdin.isatty()}")
+            print_formatted_text(f"• stdout is TTY: {sys.stdout.isatty()}")
+            print_formatted_text("")
+            print_formatted_text(
+                HTML(
+                    "<grey>For troubleshooting, see: https://docs.openhands.dev/cli-troubleshooting</grey>"
+                )
+            )
+        else:
+            print("Interactive terminal not detected. OpenHands CLI requires a TTY.")
+            print("TERM:", os.environ.get("TERM", "not set"))
+            print("stdin is TTY:", sys.stdin.isatty())
+            print("stdout is TTY:", sys.stdout.isatty())
+        return
 
     # Normalize queued_inputs to a local copy to prevent mutating the caller's list
     pending_inputs = list(queued_inputs) if queued_inputs else []
@@ -109,6 +182,11 @@ def run_cli_entry(
         )
         print_formatted_text(HTML("\n<yellow>Goodbye! 👋</yellow>"))
         return
+
+    if confirmation_policy is None:
+        from openhands.sdk.security.confirmation_policy import AlwaysConfirm
+
+        confirmation_policy = AlwaysConfirm()
 
     display_welcome(conversation_id, confirmation_policy, bool(resume_conversation_id))
 
@@ -163,7 +241,7 @@ def run_cli_entry(
                 continue
 
             elif command == "/clear":
-                display_welcome(conversation_id)
+                display_welcome(conversation_id, confirmation_policy)
                 continue
 
             elif command == "/new":
@@ -172,7 +250,7 @@ def run_cli_entry(
                     conversation_id = uuid.uuid4()
                     runner = None
                     conversation = None
-                    display_welcome(conversation_id, resume=False)
+                    display_welcome(conversation_id, confirmation_policy, resume=False)
                     print_formatted_text(
                         HTML("<green>✓ Started fresh conversation</green>")
                     )
@@ -232,9 +310,7 @@ def run_cli_entry(
                 message = None
 
             if not runner or not conversation:
-                conversation = setup_conversation(
-                    conversation_id, confirmation_policy=confirmation_policy
-                )
+                conversation = setup_conversation(conversation_id, confirmation_policy)
                 runner = ConversationRunner(conversation)
             runner.process_message(message)
 
