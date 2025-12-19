@@ -8,6 +8,7 @@ import sys
 import uuid
 from datetime import datetime
 
+from rich.console import Console
 from prompt_toolkit import print_formatted_text
 from prompt_toolkit.formatted_text import HTML
 
@@ -114,14 +115,15 @@ def run_cli_entry(
         print_formatted_text(HTML("\n<yellow>Goodbye! 👋</yellow>"))
         return
 
-    compat_result = check_terminal_compatibility()
+    console = Console()
+    compat_result = check_terminal_compatibility(console=console)
     if not compat_result.compatible:
         message = (
             "OpenHands CLI terminal UI may not work correctly in this environment: "
             f"{compat_result.reason}"
         )
         if compat_result.is_tty:
-            print_formatted_text(HTML(f"<yellow>{message}</yellow>"))
+            console.print(message, style="yellow")
         else:
             print(message)
 
