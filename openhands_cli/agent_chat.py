@@ -8,28 +8,29 @@ import sys
 import uuid
 from datetime import datetime
 
-from rich.console import Console
 from prompt_toolkit import print_formatted_text
 from prompt_toolkit.formatted_text import HTML
+from rich.console import Console
 
 from openhands.sdk import (
     Message,
     TextContent,
-)
-from openhands_cli.terminal_compat import (
-    check_terminal_compatibility,
-    strict_mode_enabled,
 )
 from openhands.sdk.conversation.state import ConversationExecutionStatus
 from openhands.sdk.security.confirmation_policy import (
     AlwaysConfirm,
     ConfirmationPolicyBase,
 )
+
 from openhands_cli.runner import ConversationRunner
 from openhands_cli.setup import (
     MissingAgentSpec,
     setup_conversation,
     verify_agent_exists_or_setup_agent,
+)
+from openhands_cli.terminal_compat import (
+    check_terminal_compatibility,
+    strict_mode_enabled,
 )
 from openhands_cli.tui.settings.mcp_screen import MCPScreen
 from openhands_cli.tui.settings.settings_screen import SettingsScreen
@@ -90,7 +91,6 @@ def run_cli_entry(
     if confirmation_policy is None:
         confirmation_policy = AlwaysConfirm()
 
-    # Normalize queued_inputs to a local copy to prevent mutating the caller's list
     pending_inputs = list(queued_inputs) if queued_inputs else []
 
     conversation_id = uuid.uuid4()
@@ -132,18 +132,14 @@ def run_cli_entry(
 
     display_welcome(conversation_id, confirmation_policy, bool(resume_conversation_id))
 
-    # Track session start time for uptime calculation
     session_start_time = datetime.now()
 
-    # Create conversation runner to handle state machine logic
     runner = None
     conversation = None
     session = get_session_prompter()
 
-    # Main chat loop
     while True:
         try:
-            # Get user input
             if pending_inputs:
                 user_input = pending_inputs.pop(0)
             else:
@@ -155,7 +151,6 @@ def run_cli_entry(
             if not user_input.strip():
                 continue
 
-            # Handle commands
             command = user_input.strip().lower()
 
             message = Message(
@@ -188,7 +183,6 @@ def run_cli_entry(
 
             elif command == "/new":
                 try:
-                    # Start a fresh conversation (no resume ID = new conversation)
                     conversation_id = uuid.uuid4()
                     runner = None
                     conversation = None
@@ -248,7 +242,6 @@ def run_cli_entry(
                     )
                     continue
 
-                # Resume without new message
                 message = None
 
             if not runner or not conversation:
@@ -258,7 +251,7 @@ def run_cli_entry(
                 runner = ConversationRunner(conversation)
             runner.process_message(message)
 
-            print()  # Add spacing
+            print()
 
         except KeyboardInterrupt:
             exit_confirmation = exit_session_confirmation()
@@ -267,5 +260,4 @@ def run_cli_entry(
                 _print_exit_hint(str(conversation_id))
                 break
 
-    # Clean up terminal state
     _restore_tty()
