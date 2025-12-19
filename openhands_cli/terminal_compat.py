@@ -1,6 +1,8 @@
 import os
 from dataclasses import dataclass
+
 from rich.console import Console
+
 
 @dataclass
 class TerminalCompatibilityResult:
@@ -8,11 +10,13 @@ class TerminalCompatibilityResult:
     reason: str | None
     is_tty: bool
 
+
 def _env_flag_true(value: str | None) -> bool:
     if value is None:
         return False
     value = value.strip().lower()
     return value in {"1", "true", "yes", "on"}
+
 
 def check_terminal_compatibility(
     *,
@@ -23,7 +27,10 @@ def check_terminal_compatibility(
     if not is_terminal:
         return TerminalCompatibilityResult(
             compatible=False,
-            reason="Rich detected a non-interactive or unsupported terminal; interactive UI may not render correctly",
+            reason=(
+                "Rich detected a non-interactive or unsupported terminal; "
+                "interactive UI may not render correctly"
+            ),
             is_tty=is_terminal,
         )
 
@@ -32,6 +39,7 @@ def check_terminal_compatibility(
         reason=None,
         is_tty=is_terminal,
     )
+
 
 def strict_mode_enabled(env: dict[str, str] | None = None) -> bool:
     if env is None:
