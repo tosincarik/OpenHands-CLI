@@ -1,5 +1,3 @@
-import types
-
 from openhands_cli.terminal_compat import (
     TerminalCompatibilityResult,
     check_terminal_compatibility,
@@ -7,34 +5,23 @@ from openhands_cli.terminal_compat import (
 )
 
 
-class _FakeStdout:
-    def __init__(self, is_tty: bool) -> None:
-        self._is_tty = is_tty
-
-    def isatty(self) -> bool:  # noqa: D401 - simple proxy
-        return self._is_tty
+class _FakeConsole:
+    def __init__(self, is_terminal: bool) -> None:
+        self.is_terminal = is_terminal
 
 
-def test_non_tty_is_incompatible():
-    stdout = _FakeStdout(is_tty=False)
-    result = check_terminal_compatibility(stdout=stdout, env={})
+def test_non_terminal_is_incompatible():
+    console = _FakeConsole(is_terminal=False)
+    result = check_terminal_compatibility(console=console)
     assert isinstance(result, TerminalCompatibilityResult)
     assert result.compatible is False
     assert result.is_tty is False
-    assert "not a TTY" in (result.reason or "")
+    assert "Rich detected" in (result.reason or "")
 
 
-def test_dumb_term_is_incompatible():
-    stdout = _FakeStdout(is_tty=True)
-    result = check_terminal_compatibility(stdout=stdout, env={"TERM": "dumb"})
-    assert result.compatible is False
-    assert result.is_tty is True
-    assert "dumb" in (result.reason or "")
-
-
-def test_valid_term_is_compatible():
-    stdout = _FakeStdout(is_tty=True)
-    result = check_terminal_compatibility(stdout=stdout, env={"TERM": "xterm-256color"})
+def test_terminal_is_compatible():
+    console = _FakeConsole(is_terminal=True)
+    result = check_terminal_compatibility(console=console)
     assert result.compatible is True
     assert result.is_tty is True
     assert result.reason is None
