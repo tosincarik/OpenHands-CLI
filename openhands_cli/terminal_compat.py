@@ -1,14 +1,13 @@
 import os
-from dataclasses import dataclass
+from collections.abc import Mapping
 
+from pydantic import BaseModel
 from rich.console import Console
 
 
-@dataclass
-class TerminalCompatibilityResult:
-    compatible: bool
-    reason: str | None
+class TerminalCompatibilityResult(BaseModel):
     is_tty: bool
+    reason: str | None = None
 
 
 def _env_flag_true(value: str | None) -> bool:
@@ -26,7 +25,6 @@ def check_terminal_compatibility(
 
     if not is_terminal:
         return TerminalCompatibilityResult(
-            compatible=False,
             reason=(
                 "Rich detected a non-interactive or unsupported terminal; "
                 "interactive UI may not render correctly"
@@ -35,13 +33,11 @@ def check_terminal_compatibility(
         )
 
     return TerminalCompatibilityResult(
-        compatible=True,
-        reason=None,
         is_tty=is_terminal,
     )
 
 
-def strict_mode_enabled(env: dict[str, str] | None = None) -> bool:
+def strict_mode_enabled(env: Mapping[str, str] | None = None) -> bool:
     if env is None:
-        env = os.environ  # type: ignore[assignment]
+        env = os.environ
     return _env_flag_true(env.get("OPENHANDS_CLI_STRICT_TERMINAL"))
