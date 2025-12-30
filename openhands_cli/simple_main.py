@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 from rich.console import Console
 
 from openhands_cli.argparsers.main_parser import create_main_parser
+from openhands_cli.terminal_compat import check_terminal_compatibility
 from openhands_cli.theme import OPENHANDS_THEME
 from openhands_cli.utils import create_seeded_instructions_from_args
 
@@ -167,6 +168,17 @@ def main() -> None:
             handle_cloud_command(args)
 
         else:
+            compat_result = check_terminal_compatibility(console=console)
+            if not compat_result.is_tty:
+                print(
+                    "OpenHands CLI terminal UI may not work correctly in this environment: "
+                    f"{compat_result.reason}"
+                )
+                print(
+                    "To override Rich's detection, you can set TTY_INTERACTIVE=1 "
+                    "(and optionally TTY_COMPATIBLE=1)."
+                )
+
             # Handle resume logic (including --last and conversation list)
             resume_id = handle_resume_logic(args)
             if resume_id is None and (args.last or args.resume == ""):
